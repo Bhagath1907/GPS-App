@@ -19,11 +19,13 @@ jobs:
         distribution: 'temurin'
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3 # This installs the build tool for us
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: 8.4  # This pins the version to one that works with your code
 
     - name: Build APK
       run: |
-        # This part automatically finds your android folder and builds the app
+        # Find the directory containing settings.gradle
         ANDROID_DIR=$(find . -name "settings.gradle" -exec dirname {} \;)
         echo "Found Android project in: $ANDROID_DIR"
         cd "$ANDROID_DIR"
@@ -33,4 +35,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: gps-provider-apk
-        path: "**/app-debug.apk" # This finds the finished file wherever it is
+        path: "**/app-debug.apk"
