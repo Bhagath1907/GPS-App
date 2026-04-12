@@ -1,0 +1,5 @@
+{
+  "name": "Bluetooth GPS Provider for Android",
+  "description": "A native Android application that acts as a Bluetooth GPS provider, streaming NMEA sentences to Windows applications like Aadhaar ECMP.",
+  "requestFramePermissions": ["geolocation"]
+}

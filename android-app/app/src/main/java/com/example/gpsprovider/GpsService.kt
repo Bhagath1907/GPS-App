@@ -1,0 +1,139 @@
+package com.example.gpsprovider
+
+import android.annotation.SuppressLint
+import android.app.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothSocket
+import android.content.Intent
+import android.location.Location
+import android.os.Binder
+import android.os.IBinder
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.google.android.gms.location.*
+import java.io.IOException
+import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
+
+class GpsService : Service() {
+
+    private val TAG = "GpsService"
+    private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val CHANNEL_ID = "GpsProviderChannel"
+    
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var lastLocation: Location? = null
+    private var bluetoothSocket: BluetoothSocket? = null
+    private var serverSocket: BluetoothServerSocket? = null
+    private val isRunning = AtomicBoolean(true)
+
+    inner class LocalBinder : Binder() {
+        fun getService(): GpsService = this@GpsService
+    }
+
+    private val binder = LocalBinder()
+
+    override fun onBind(intent: Intent): IBinder = binder
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        startForeground(1, createNotification("Waiting for connection..."))
+        
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        startLocationUpdates()
+        startBluetoothServer()
+    }
+
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(CHANNEL_ID, "GPS Provider Service", NotificationManager.IMPORTANCE_LOW)
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun createNotification(content: String): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("GPS Bluetooth Provider")
+            .setContentText(content)
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .build()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000).build()
+        fusedLocationClient.requestLocationUpdates(locationRequest, object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                lastLocation = result.lastLocation
+                updateNotification()
+            }
+        }, mainLooper)
+    }
+
+    private fun updateNotification() {
+        val accuracy = lastLocation?.accuracy ?: -1f
+        val status = if (bluetoothSocket?.isConnected == true) "Connected" else "Standby"
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(1, createNotification("Status: $status | Accuracy: ${accuracy}m"))
+    }
+
+    private fun startBluetoothServer() {
+        Thread {
+            val adapter = BluetoothAdapter.getDefaultAdapter()
+            try {
+                serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
+                while (isRunning.get()) {
+                    Log.d(TAG, "Waiting for Bluetooth connection...")
+                    val socket = serverSocket?.accept()
+                    if (socket != null) {
+                        bluetoothSocket = socket
+                        Log.d(TAG, "Bluetooth connected!")
+                        updateNotification()
+                    }
+                }
+            } catch (e: IOException) {
+                Log.e(TAG, "Socket error", e)
+            }
+        }.start()
+    }
+
+    fun transmitBurst(): Boolean {
+        val location = lastLocation ?: return false
+        if (location.accuracy > 10) return false
+        
+        val socket = bluetoothSocket
+        if (socket == null || !socket.isConnected) return false
+
+        Thread {
+            try {
+                val outputStream = socket.outputStream
+                repeat(5) {
+                    val gga = NmeaUtils.generateGga(location)
+                    val rmc = NmeaUtils.generateRmc(location)
+                    outputStream.write("$gga\r\n".toByteArray())
+                    outputStream.write("$rmc\r\n".toByteArray())
+                    Thread.sleep(200)
+                }
+                outputStream.flush()
+            } catch (e: IOException) {
+                Log.e(TAG, "Transmission failed", e)
+                bluetoothSocket = null
+                updateNotification()
+            }
+        }.start()
+        
+        return true
+    }
+
+    fun getLastAccuracy(): Float = lastLocation?.accuracy ?: -1f
+
+    override fun onDestroy() {
+        isRunning.set(false)
+        try {
+            serverSocket?.close()
+            bluetoothSocket?.close()
+        } catch (e: IOException) {}
+        super.onDestroy()
+    }
+}
