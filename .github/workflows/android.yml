@@ -10,23 +10,27 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4  # Updated to v4
+      uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4  # Updated to v4
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x android-app/gradlew
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3 # This installs the build tool for us
 
-    - name: Build with Gradle
-      run: cd android-app && ./gradlew assembleDebug
+    - name: Build APK
+      run: |
+        # This part automatically finds your android folder and builds the app
+        ANDROID_DIR=$(find . -name "settings.gradle" -exec dirname {} \;)
+        echo "Found Android project in: $ANDROID_DIR"
+        cd "$ANDROID_DIR"
+        gradle assembleDebug
 
     - name: Upload APK
-      uses: actions/upload-artifact@v4  # This is the critical fix
+      uses: actions/upload-artifact@v4
       with:
         name: gps-provider-apk
-        path: android-app/app/build/outputs/apk/debug/app-debug.apk
+        path: "**/app-debug.apk" # This finds the finished file wherever it is
