@@ -78,25 +78,33 @@ class GpsService : Service() {
         manager.notify(1, createNotification("Status: $status | Accuracy: ${accuracy}m"))
     }
 
-    private fun startBluetoothServer() {
-        Thread {
-            val adapter = BluetoothAdapter.getDefaultAdapter()
-            try {
-                serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
-                while (isRunning.get()) {
-                    Log.d(TAG, "Waiting for Bluetooth connection...")
-                    val socket = serverSocket?.accept()
-                    if (socket != null) {
-                        bluetoothSocket = socket
-                        Log.d(TAG, "Bluetooth connected!")
-                        updateNotification()
+   private fun startBluetoothServer() {
+    Thread {
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        try {
+            serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
+            while (isRunning.get()) {
+                Log.d(TAG, "Waiting for Bluetooth connection...")
+                val socket = serverSocket?.accept() // The 'Waiter' waits here
+                
+                if (socket != null) {
+                    bluetoothSocket = socket
+                    Log.d(TAG, "Bluetooth connected!")
+                    updateNotification()
+                    
+                    // NEW STABILITY LOGIC:
+                    // Wait here and don't look for new customers until this one leaves
+                    while (socket.isConnected && isRunning.get()) {
+                        Thread.sleep(1000) 
                     }
+                    Log.d(TAG, "Client disconnected, waiting for next...")
                 }
-            } catch (e: IOException) {
-                Log.e(TAG, "Socket error", e)
             }
-        }.start()
-    }
+        } catch (e: IOException) {
+            Log.e(TAG, "Socket error", e)
+        }
+    }.start()
+}
 
     private val isStreaming = AtomicBoolean(false)
 
