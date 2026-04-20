@@ -15,10 +15,14 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
+
+    # This is the "Magic" step that fixes the Gradle 9.4 error
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.4 # Forces a compatible version
 
     - name: Build with Gradle
-      # We use 'gradle' instead of './gradlew' to use the system-installed version
       run: gradle assembleDebug
       working-directory: ./android-app
 
