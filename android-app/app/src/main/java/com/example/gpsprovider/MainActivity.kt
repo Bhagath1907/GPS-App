@@ -1,31 +1,142 @@
-private fun startUpdateLoop() {
-    Timer().scheduleAtFixedRate(object : TimerTask() {
-        override fun run() {
-            runOnUiThread {
-                val service = gpsService ?: return@runOnUiThread
-                
-                // 1. Update Accuracy Display
-                val acc = service.getLastAccuracy()
-                if (acc != -1f) {
-                    accuracyText.text = "Current Accuracy: ${String.format("%.1f", acc)}m"
-                    accuracyProgress.progress = (100 - (acc * 5).toInt()).coerceIn(0, 100)
-                    accuracyText.setTextColor(ContextCompat.getColor(this@MainActivity, 
-                        if (acc <= 10) android.R.color.holo_green_dark else android.R.color.holo_red_dark))
-                }
+package com.example.gpsprovider
 
-                // 2. NEW: Sync Button State with Service
-                if (service.isCurrentlyStreaming()) {
-                    transmitButton.text = "STOP TRANSMISSION"
-                    transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_dark))
+import android.Manifest
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.os.IBinder
+import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import java.util.*
+
+class MainActivity : AppCompatActivity() {
+
+    private var gpsService: GpsService? = null
+    private var isBound = false
+    
+    private lateinit var accuracyText: TextView
+    private lateinit var accuracyProgress: ProgressBar
+    private lateinit var transmitButton: Button
+    private lateinit var statusText: TextView
+
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as GpsService.LocalBinder
+            gpsService = binder.getService()
+            isBound = true
+            startUpdateLoop()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            isBound = false
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        accuracyText = findViewById(R.id.accuracyText)
+        accuracyProgress = findViewById(R.id.accuracyProgress)
+        transmitButton = findViewById(R.id.transmitButton)
+        statusText = findViewById(R.id.statusText)
+
+        checkPermissions()
+
+        transmitButton.setOnClickListener {
+            val service = gpsService
+            if (service == null) {
+                Toast.makeText(this, "Service not ready", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (service.isCurrentlyStreaming()) {
+                service.stopStreaming()
+                // The UpdateLoop below will handle changing the button text/color automatically
+                Toast.makeText(this, "Streaming Stopped", Toast.LENGTH_SHORT).show()
+            } else {
+                if (service.startStreaming()) {
+                    Toast.makeText(this, "Streaming Started", Toast.LENGTH_SHORT).show()
                 } else {
-                    transmitButton.text = "START TRANSMISSION"
-                    transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_green_dark))
+                    val acc = service.getLastAccuracy()
+                    if (acc > 10) {
+                        Toast.makeText(this, "Accuracy too low (${acc}m > 10m)", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, "Check Bluetooth Connection", Toast.LENGTH_SHORT).show()
+                    }
                 }
-
-                // 3. Update Status Text
-                val status = if (service.isCurrentlyStreaming()) "Status: STREAMING" else "Status: Standby"
-                statusText.text = status
             }
         }
-    }, 0, 1000)
+
+        val intent = Intent(this, GpsService::class.java)
+        startForegroundService(intent)
+        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun checkPermissions() {
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_SCAN
+        )
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        
+        val missing = permissions.filter { 
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
+        }
+        
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), 100)
+        }
+    }
+
+    private fun startUpdateLoop() {
+        Timer().scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                runOnUiThread {
+                    val service = gpsService ?: return@runOnUiThread
+                    
+                    // 1. Update Accuracy Display
+                    val acc = service.getLastAccuracy()
+                    if (acc != -1f) {
+                        accuracyText.text = "Current Accuracy: ${String.format("%.1f", acc)}m"
+                        accuracyProgress.progress = (100 - (acc * 5).toInt()).coerceIn(0, 100)
+                        accuracyText.setTextColor(ContextCompat.getColor(this@MainActivity, 
+                            if (acc <= 10) android.R.color.holo_green_dark else android.R.color.holo_red_dark))
+                    }
+
+                    // 2. Sync Button & Status with Service State
+                    if (service.isCurrentlyStreaming()) {
+                        transmitButton.text = "STOP TRANSMISSION"
+                        transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_dark))
+                        statusText.text = "Status: STREAMING"
+                    } else {
+                        transmitButton.text = "START TRANSMISSION"
+                        transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_green_dark))
+                        statusText.text = "Status: Standby"
+                    }
+                }
+            }
+        }, 0, 1000)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isBound) {
+            unbindService(connection)
+            isBound = false
+        }
+    }
 }
