@@ -15,7 +15,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.util.*
+import java.util.Timer
+import java.util.TimerTask
 
 class MainActivity : AppCompatActivity() {
 
@@ -60,7 +61,6 @@ class MainActivity : AppCompatActivity() {
 
             if (service.isCurrentlyStreaming()) {
                 service.stopStreaming()
-                // The UpdateLoop below will handle changing the button text/color automatically
                 Toast.makeText(this, "Streaming Stopped", Toast.LENGTH_SHORT).show()
             } else {
                 if (service.startStreaming()) {
@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val permissions = mutableListOf(
+        val permissionsList = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.BLUETOOTH_ADVERTISE,
@@ -90,10 +90,10 @@ class MainActivity : AppCompatActivity() {
         )
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         
-        val missing = permissions.filter { 
+        val missing = permissionsList.filter { 
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
         }
         
@@ -108,7 +108,6 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     val service = gpsService ?: return@runOnUiThread
                     
-                    // 1. Update Accuracy Display
                     val acc = service.getLastAccuracy()
                     if (acc != -1f) {
                         accuracyText.text = "Current Accuracy: ${String.format("%.1f", acc)}m"
@@ -117,7 +116,6 @@ class MainActivity : AppCompatActivity() {
                             if (acc <= 10) android.R.color.holo_green_dark else android.R.color.holo_red_dark))
                     }
 
-                    // 2. Sync Button & Status with Service State
                     if (service.isCurrentlyStreaming()) {
                         transmitButton.text = "STOP TRANSMISSION"
                         transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_dark))
