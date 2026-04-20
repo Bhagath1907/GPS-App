@@ -7,25 +7,27 @@ import java.util.*
 object NmeaUtils {
 
     fun generateGga(location: Location): String {
-        val time = SimpleDateFormat("HHmmss.SS", Locale.US).format(Date(location.time))
+        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(location.time))
         val lat = convertToNmeaFormat(location.latitude, true)
         val lon = convertToNmeaFormat(location.longitude, false)
-        val quality = 1 // GPS fix
-        val satellites = 8 // Mocked or from GnssStatus
-        val hdop = 1.0 // Mocked
-        val alt = location.altitude
+        val quality = 1 
+        val satellites = 08 // Fixed to 2 digits for compatibility
+        val hdop = 1.0 
+        // FIX: Round altitude to 1 decimal place
+        val alt = String.format(Locale.US, "%.1f", location.altitude)
         
         val sentence = "GPGGA,$time,$lat,$lon,$quality,$satellites,$hdop,$alt,M,0.0,M,,"
         return "$${sentence}*${calculateChecksum(sentence)}"
     }
 
     fun generateRmc(location: Location): String {
-        val time = SimpleDateFormat("HHmmss.SS", Locale.US).format(Date(location.time))
-        val status = "A" // Active
+        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(location.time))
+        val status = "A" 
         val lat = convertToNmeaFormat(location.latitude, true)
         val lon = convertToNmeaFormat(location.longitude, false)
-        val speed = location.speed * 1.94384 // m/s to knots
-        val bearing = location.bearing
+        // FIX: Round speed to 1 decimal place
+        val speed = String.format(Locale.US, "%.1f", location.speed * 1.94384)
+        val bearing = String.format(Locale.US, "%.1f", location.bearing)
         val date = SimpleDateFormat("ddMMyy", Locale.US).format(Date(location.time))
         
         val sentence = "GPRMC,$time,$status,$lat,$lon,$speed,$bearing,$date,,,"
