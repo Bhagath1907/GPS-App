@@ -52,14 +52,31 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
 
         transmitButton.setOnClickListener {
-            if (gpsService?.transmitBurst() == true) {
-                Toast.makeText(this, "Transmitting burst...", Toast.LENGTH_SHORT).show()
+            val service = gpsService
+            if (service == null) {
+                Toast.makeText(this, "Service not ready", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            if (service.isCurrentlyStreaming()) {
+                // Stop Streaming
+                service.stopStreaming()
+                transmitButton.text = "START TRANSMISSION"
+                transmitButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+                Toast.makeText(this, "Streaming Stopped", Toast.LENGTH_SHORT).show()
             } else {
-                val acc = gpsService?.getLastAccuracy() ?: -1f
-                if (acc > 10) {
-                    Toast.makeText(this, "Accuracy too low (${acc}m > 10m)", Toast.LENGTH_LONG).show()
+                // Start Streaming
+                if (service.startStreaming()) {
+                    transmitButton.text = "STOP TRANSMISSION"
+                    transmitButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+                    Toast.makeText(this, "Streaming Started", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "Not connected or GPS not ready", Toast.LENGTH_SHORT).show()
+                    val acc = service.getLastAccuracy()
+                    if (acc > 10) {
+                        Toast.makeText(this, "Accuracy too low (${acc}m > 10m)", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, "Check Bluetooth Connection", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }

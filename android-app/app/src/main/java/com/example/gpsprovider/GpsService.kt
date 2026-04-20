@@ -98,33 +98,56 @@ class GpsService : Service() {
         }.start()
     }
 
-    fun transmitBurst(): Boolean {
-        val location = lastLocation ?: return false
-        if (location.accuracy > 10) return false
-        
+    private val isStreaming = AtomicBoolean(false)
+
+    fun startStreaming(): Boolean {
         val socket = bluetoothSocket
         if (socket == null || !socket.isConnected) return false
-
+        
+        isStreaming.set(true)
+        
+        // We use an Asynchronous thread for streaming.
+        // Asynchronous (ay-sin-kruh-nuhs) means the phone does this in the background 
+        // while the screen stays active and responsive to you!
         Thread {
             try {
                 val outputStream = socket.outputStream
-                repeat(5) {
-                    val gga = NmeaUtils.generateGga(location)
-                    val rmc = NmeaUtils.generateRmc(location)
-                    outputStream.write("$gga\r\n".toByteArray())
-                    outputStream.write("$rmc\r\n".toByteArray())
-                    Thread.sleep(200)
+                while (isStreaming.get() && socket.isConnected) {
+                    val location = lastLocation
+                    
+                    // Accuracy Check: We only transmit if the data is precise (<= 10m).
+                    if (location != null && location.accuracy <= 10) {
+                        val gga = NmeaUtils.generateGga(location)
+                        val rmc = NmeaUtils.generateRmc(location)
+                        
+                        // Sending NMEA sentences with a Checksum.
+                        // Checksum (chek-suhm) is like a secret code at the end of the message 
+                        // that helps the PC check if the data got scrambled during the trip!
+                        outputStream.write("$gga\r\n".toByteArray())
+                        outputStream.write("$rmc\r\n".toByteArray())
+                        outputStream.flush()
+                    }
+                    
+                    // We sleep for 1000ms to reduce Latency and prevent data flooding.
+                    // Latency (lay-ten-see) is the tiny delay or 'waiting time' between 
+                    // when data is sent and when it arrives!
+                    Thread.sleep(1000)
                 }
-                outputStream.flush()
             } catch (e: IOException) {
-                Log.e(TAG, "Transmission failed", e)
-                bluetoothSocket = null
-                updateNotification()
+                Log.e(TAG, "Streaming failed", e)
+                stopStreaming()
             }
         }.start()
         
         return true
     }
+
+    fun stopStreaming() {
+        isStreaming.set(false)
+        updateNotification()
+    }
+
+    fun isCurrentlyStreaming(): Boolean = isStreaming.get()
 
     fun getLastAccuracy(): Float = lastLocation?.accuracy ?: -1f
 
