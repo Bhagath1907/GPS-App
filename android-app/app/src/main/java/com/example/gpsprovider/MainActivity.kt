@@ -59,13 +59,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (service.isCurrentlyStreaming()) {
-                // Stop Streaming
                 service.stopStreaming()
                 transmitButton.text = "START TRANSMISSION"
                 transmitButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
                 Toast.makeText(this, "Streaming Stopped", Toast.LENGTH_SHORT).show()
             } else {
-                // Start Streaming
                 if (service.startStreaming()) {
                     transmitButton.text = "STOP TRANSMISSION"
                     transmitButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
@@ -87,14 +85,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val permissions = arrayOf(
+        val permissionsList = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_SCAN
         )
         
-        val missing = permissions.filter { 
+        // Asks for notification permission on Android 13+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        
+        val missing = permissionsList.filter { 
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
         }
         
