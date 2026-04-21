@@ -53,35 +53,45 @@ class GpsService : Service() {
     private fun startBluetoothServer() {
         Thread {
             val adapter = BluetoothAdapter.getDefaultAdapter()
-            try {
-                serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
-                while (isRunning.get()) {
+            while (isRunning.get()) {
+                try {
+                    if (serverSocket == null) {
+                        serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
+                    }
                     val socket = serverSocket?.accept()
                     if (socket != null) {
                         try { bluetoothSocket?.close() } catch (e: Exception) {}
                         bluetoothSocket = socket
                         updateNotification()
                         
-                        // Keep server alive and detect disconnection by reading from the socket
-                        val buffer = ByteArray(1024)
-                        try {
-                            val inputStream = socket.inputStream
-                            while (socket.isConnected && isRunning.get()) {
-                                val bytes = inputStream.read(buffer)
-                                if (bytes == -1) break // Connection closed by peer
+                        // Handle client disconnection in a separate thread so server can keep accepting
+                        Thread {
+                            val buffer = ByteArray(1024)
+                            try {
+                                val inputStream = socket.inputStream
+                                while (socket.isConnected && isRunning.get()) {
+                                    if (inputStream.read(buffer) == -1) break // Connection closed by peer
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Client disconnected", e)
                             }
-                        } catch (e: IOException) {
-                            // Disconnected
-                            Log.e(TAG, "Client disconnected", e)
-                        }
-                        
-                        try { socket.close() } catch (e: Exception) {}
-                        if (bluetoothSocket == socket) bluetoothSocket = null
-                        stopStreaming() // Stop streaming if client disconnects
-                        updateNotification()
+                            
+                            try { socket.close() } catch (e: Exception) {}
+                            if (bluetoothSocket == socket) {
+                                bluetoothSocket = null
+                                stopStreaming() // Stop streaming if client disconnects
+                                updateNotification()
+                            }
+                        }.start()
                     }
+                } catch (e: Exception) { 
+                    Log.e(TAG, "Server Error", e)
+                    try { serverSocket?.close() } catch (ignored: Exception) {}
+                    serverSocket = null
+                    // Wait a bit before retrying to avoid tight loop on failure
+                    try { Thread.sleep(2000) } catch (ignored: Exception) {}
                 }
-            } catch (e: IOException) { Log.e(TAG, "Server Error", e) }
+            }
         }.start()
     }
 
