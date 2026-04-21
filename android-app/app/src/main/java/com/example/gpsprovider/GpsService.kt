@@ -27,6 +27,7 @@ class GpsService : Service() {
     private var bluetoothSocket: BluetoothSocket? = null
     private var serverSocket: BluetoothServerSocket? = null
     private val isRunning = AtomicBoolean(true)
+    private val isStreaming = AtomicBoolean(false)
 
     inner class LocalBinder : Binder() {
         fun getService(): GpsService = this@GpsService
@@ -75,7 +76,7 @@ class GpsService : Service() {
         val accuracy = lastLocation?.accuracy ?: -1f
         val status = if (bluetoothSocket?.isConnected == true) "Connected" else "Standby"
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(1, createNotification("Status: $status | Accuracy: ${accuracy}m"))
+        manager.notify(1, createNotification("Status: $status | Accuracy: ${String.format("%.1f", accuracy)}m"))
     }
 
     private fun startBluetoothServer() {
@@ -84,13 +85,21 @@ class GpsService : Service() {
             try {
                 serverSocket = adapter.listenUsingRfcommWithServiceRecord("GpsProvider", SPP_UUID)
                 while (isRunning.get()) {
+                    Log.d(TAG, "Waiting for Bluetooth connection...")
                     val socket = serverSocket?.accept() 
+                    
                     if (socket != null) {
                         bluetoothSocket = socket
+                        Log.d(TAG, "Bluetooth connected!")
                         updateNotification()
+                        
+                        // STABILITY LOGIC: Hold the server thread here while the client is connected.
+                        // This prevents the 'Waiter' from looking for new connections too early.
                         while (socket.isConnected && isRunning.get()) {
                             Thread.sleep(1000) 
                         }
+                        Log.d(TAG, "Client disconnected, waiting for next...")
+                        updateNotification()
                     }
                 }
             } catch (e: IOException) {
@@ -99,30 +108,41 @@ class GpsService : Service() {
         }.start()
     }
 
-    private val isStreaming = AtomicBoolean(false)
-
     fun startStreaming(): Boolean {
         val socket = bluetoothSocket
         if (socket == null || !socket.isConnected) return false
+        
         isStreaming.set(true)
+        
         Thread {
             try {
                 val outputStream = socket.outputStream
                 while (isStreaming.get() && socket.isConnected) {
                     val location = lastLocation
+                    
                     if (location != null && location.accuracy <= 10) {
+                        // NMEA sentences generated using strict UCL formatting
                         val gga = NmeaUtils.generateGga(location)
                         val rmc = NmeaUtils.generateRmc(location)
+                        
                         outputStream.write("$gga\r\n".toByteArray())
+                        outputStream.flush()
                         outputStream.write("$rmc\r\n".toByteArray())
                         outputStream.flush()
+                    } else {
+                        // HEARTBEAT: Keep the Bluetooth link active even when accuracy is poor.
+                        outputStream.write("\n".toByteArray())
+                        outputStream.flush()
                     }
+                    
                     Thread.sleep(1000)
                 }
             } catch (e: IOException) {
+                Log.e(TAG, "Streaming failed", e)
                 stopStreaming()
             }
         }.start()
+        
         return true
     }
 
@@ -132,6 +152,7 @@ class GpsService : Service() {
     }
 
     fun isCurrentlyStreaming(): Boolean = isStreaming.get()
+
     fun getLastAccuracy(): Float = lastLocation?.accuracy ?: -1f
 
     override fun onDestroy() {
@@ -139,7 +160,9 @@ class GpsService : Service() {
         try {
             serverSocket?.close()
             bluetoothSocket?.close()
-        } catch (e: IOException) {}
+        } catch (e: IOException) {
+            Log.e(TAG, "Error closing sockets", e)
+        }
         super.onDestroy()
     }
 }
