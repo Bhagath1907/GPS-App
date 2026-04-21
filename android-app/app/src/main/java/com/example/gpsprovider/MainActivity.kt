@@ -76,14 +76,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val intent = Intent(this, GpsService::class.java)
-        startForegroundService(intent)
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        // Defer service start until permissions are granted
     }
 
     private fun checkPermissions() {
         val permissionsList = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_SCAN
@@ -99,6 +98,26 @@ class MainActivity : AppCompatActivity() {
         
         if (missing.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, missing.toTypedArray(), 100)
+        } else {
+            startGpsService()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 100) {
+            startGpsService()
+        }
+    }
+
+    private fun startGpsService() {
+        try {
+            val intent = Intent(this, GpsService::class.java)
+            startForegroundService(intent)
+            bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Failed to start service: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
