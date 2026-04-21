@@ -58,10 +58,27 @@ class GpsService : Service() {
                 while (isRunning.get()) {
                     val socket = serverSocket?.accept()
                     if (socket != null) {
+                        try { bluetoothSocket?.close() } catch (e: Exception) {}
                         bluetoothSocket = socket
                         updateNotification()
-                        // Keep server alive but don't accept new ones while connected
-                        while (socket.isConnected && isRunning.get()) { Thread.sleep(2000) }
+                        
+                        // Keep server alive and detect disconnection by reading from the socket
+                        val buffer = ByteArray(1024)
+                        try {
+                            val inputStream = socket.inputStream
+                            while (socket.isConnected && isRunning.get()) {
+                                val bytes = inputStream.read(buffer)
+                                if (bytes == -1) break // Connection closed by peer
+                            }
+                        } catch (e: IOException) {
+                            // Disconnected
+                            Log.e(TAG, "Client disconnected", e)
+                        }
+                        
+                        try { socket.close() } catch (e: Exception) {}
+                        if (bluetoothSocket == socket) bluetoothSocket = null
+                        stopStreaming() // Stop streaming if client disconnects
+                        updateNotification()
                     }
                 }
             } catch (e: IOException) { Log.e(TAG, "Server Error", e) }
@@ -79,21 +96,22 @@ class GpsService : Service() {
                 val out = socket.outputStream
                 while (isStreaming.get() && socket.isConnected) {
                     val loc = lastLocation
-                    // Permanent Fix: Precise timing (1Hz) for UCL compatibility
-                    if (loc != null && loc.accuracy <= 10) {
+                    // Precise timing (1Hz) for UCL compatibility
+                    if (loc != null && loc.accuracy <= 15) { // Relaxed to 15m as some phones struggle with 10m indoors
                         val gga = NmeaUtils.generateGga(loc)
                         val rmc = NmeaUtils.generateRmc(loc)
                         out.write("$gga\r\n$rmc\r\n".toByteArray())
                         out.flush()
-                    } else {
-                        // Keep connection alive with a 'Null' NMEA comment 
-                        // This keeps Windows drivers happy without confusing UCL
-                        out.write("$--WAITING_FOR_ACCURACY*00\r\n".toByteArray())
-                        out.flush()
                     }
+                    // We REMOVED the non-standard $--WAITING... string. 
+                    // Sending invalid NMEA sentences crashes Aadhar UCL's parser, 
+                    // causing it to ignore the COM port even if Putty sees the data.
                     Thread.sleep(1000) 
                 }
-            } catch (e: IOException) { stopStreaming() }
+            } catch (e: IOException) { 
+                try { socket.close() } catch (ignored: Exception) {}
+                stopStreaming() 
+            }
         }.start()
         return true
     }

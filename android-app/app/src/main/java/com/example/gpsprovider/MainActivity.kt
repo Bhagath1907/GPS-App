@@ -67,8 +67,8 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Streaming Started", Toast.LENGTH_SHORT).show()
                 } else {
                     val acc = service.getLastAccuracy()
-                    if (acc > 10) {
-                        Toast.makeText(this, "Accuracy too low (${acc}m > 10m)", Toast.LENGTH_LONG).show()
+                    if (acc > 15) {
+                        Toast.makeText(this, "Accuracy too low (${acc}m > 15m)", Toast.LENGTH_LONG).show()
                     } else {
                         Toast.makeText(this, "Check Bluetooth Connection", Toast.LENGTH_SHORT).show()
                     }
