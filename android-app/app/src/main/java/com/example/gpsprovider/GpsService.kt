@@ -158,7 +158,9 @@ class GpsService : Service() {
 
     private fun updateNotification() {
         val acc = lastLocation?.accuracy ?: -1f
-        val status = if (isStreaming.get()) "STREAMING" else "STANDBY"
+        val status = if (isStreaming.get()) {
+            if (isClientConnected()) "TRANSMITTING" else "WAITING FOR PC"
+        } else "STANDBY"
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(1, createNotification("Status: $status | Accuracy: ${String.format("%.1f", acc)}m"))
     }

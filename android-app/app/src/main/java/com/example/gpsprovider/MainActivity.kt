@@ -63,15 +63,14 @@ class MainActivity : AppCompatActivity() {
                 service.stopStreaming()
                 Toast.makeText(this, "Streaming Stopped", Toast.LENGTH_SHORT).show()
             } else {
-                if (service.startStreaming()) {
-                    Toast.makeText(this, "Streaming Started", Toast.LENGTH_SHORT).show()
+                service.startStreaming()
+                val acc = service.getLastAccuracy()
+                if (acc > 15f && acc != -1f) {
+                    Toast.makeText(this, "Warning: Low Accuracy (${String.format("%.1f", acc)}m > 15m)", Toast.LENGTH_LONG).show()
+                } else if (!service.isClientConnected()) {
+                    Toast.makeText(this, "Ready. Open UCL and Sync.", Toast.LENGTH_LONG).show()
                 } else {
-                    val acc = service.getLastAccuracy()
-                    if (acc > 15) {
-                        Toast.makeText(this, "Accuracy too low (${acc}m > 15m)", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(this, "Check Bluetooth Connection", Toast.LENGTH_SHORT).show()
-                    }
+                    Toast.makeText(this, "Streaming Started", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -138,7 +137,11 @@ class MainActivity : AppCompatActivity() {
                     if (service.isCurrentlyStreaming()) {
                         transmitButton.text = "STOP TRANSMISSION"
                         transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_dark))
-                        statusText.text = "Status: STREAMING"
+                        if (service.isClientConnected()) {
+                            statusText.text = "Status: TRANSMITTING TO PC"
+                        } else {
+                            statusText.text = "Status: READY (Waiting for PC...)"
+                        }
                     } else {
                         transmitButton.text = "START TRANSMISSION"
                         transmitButton.setBackgroundColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_green_dark))
