@@ -5,57 +5,42 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object NmeaUtils {
-
-    fun generateGga(location: Location): String {
-        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(location.time))
-        val lat = convertToNmeaFormat(location.latitude, true)
-        val lon = convertToNmeaFormat(location.longitude, false)
-        val quality = 1 
-        val satellites = 8 
-        val hdop = 1.0 
-        // UCL FIX: Ensure altitude is exactly 1 decimal place (e.g., 366.7)
-        val alt = String.format(Locale.US, "%.1f", location.altitude)
+    // Permanent Fix: Strict formatting for UCL (Decimal precision and field counts)
+    fun generateGga(l: Location): String {
+        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(l.time))
+        val lat = convertToNmea(l.latitude, true)
+        val lon = convertToNmea(l.longitude, false)
+        val alt = String.format(Locale.US, "%.1f", l.altitude)
         
-        // UCL FIX: Use %02d to force satellite count to be "08"
-        val sentence = String.format(Locale.US, "GPGGA,%s,%s,%s,%d,%02d,%.1f,%s,M,0.0,M,,", 
-            time, lat, lon, quality, satellites, hdop, alt)
-        return "$${sentence}*${calculateChecksum(sentence)}"
+        // Standard GGA: $GPGGA,Time,Lat,N,Lon,E,Quality,Sats,HDOP,Alt,M,Geoid,M,Age,Station*CS
+        val raw = "GPGGA,$time,$lat,$lon,1,08,1.0,$alt,M,0.0,M,,"
+        return "$${raw}*${calculateChecksum(raw)}"
     }
 
-    fun generateRmc(location: Location): String {
-        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(location.time))
-        val status = "A" 
-        val lat = convertToNmeaFormat(location.latitude, true)
-        val lon = convertToNmeaFormat(location.longitude, false)
-        // UCL FIX: Round speed and bearing to 1 decimal place
-        val speed = String.format(Locale.US, "%.1f", location.speed * 1.94384)
-        val bearing = String.format(Locale.US, "%.1f", location.bearing)
-        val date = SimpleDateFormat("ddMMyy", Locale.US).format(Date(location.time))
+    fun generateRmc(l: Location): String {
+        val time = SimpleDateFormat("HHmmss.ss", Locale.US).format(Date(l.time))
+        val lat = convertToNmea(l.latitude, true)
+        val lon = convertToNmea(l.longitude, false)
+        val speed = String.format(Locale.US, "%.1f", l.speed * 1.94384)
+        val bear = String.format(Locale.US, "%.1f", l.bearing)
+        val date = SimpleDateFormat("ddMMyy", Locale.US).format(Date(l.time))
         
-        val sentence = "GPRMC,$time,$status,$lat,$lon,$speed,$bearing,$date,,,"
-        return "$${sentence}*${calculateChecksum(sentence)}"
+        // Standard RMC: $GPRMC,Time,A,Lat,N,Lon,E,Speed,Course,Date,MagVar,Dir*CS
+        val raw = "GPRMC,$time,A,$lat,$lon,$speed,$bear,$date,,,"
+        return "$${raw}*${calculateChecksum(raw)}"
     }
 
-    private fun convertToNmeaFormat(coordinate: Double, isLatitude: Boolean): String {
-        val absCoord = Math.abs(coordinate)
-        val degrees = Math.floor(absCoord).toInt()
-        val minutes = (absCoord - degrees) * 60.0
-        
-        val direction = if (isLatitude) {
-            if (coordinate >= 0) "N" else "S"
-        } else {
-            if (coordinate >= 0) "E" else "W"
-        }
-        
-        val degreeFormat = if (isLatitude) "%02d" else "%03d"
-        return String.format(Locale.US, "$degreeFormat%07.4f,%s", degrees, minutes, direction)
+    private fun convertToNmea(coord: Double, isLat: Boolean): String {
+        val abs = Math.abs(coord)
+        val deg = Math.floor(abs).toInt()
+        val min = (abs - deg) * 60.0
+        val dir = if (isLat) (if (coord >= 0) "N" else "S") else (if (coord >= 0) "E" else "W")
+        return String.format(Locale.US, if (isLat) "%02d%07.4f,%s" else "%03d%07.4f,%s", deg, min, dir)
     }
 
-    private fun calculateChecksum(sentence: String): String {
-        var checksum = 0
-        for (char in sentence) {
-            checksum = checksum xor char.toInt()
-        }
-        return String.format("%02X", checksum)
+    private fun calculateChecksum(s: String): String {
+        var cs = 0
+        for (c in s) { cs = cs xor c.toInt() }
+        return String.format("%02X", cs)
     }
 }
