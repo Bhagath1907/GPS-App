@@ -11,11 +11,12 @@ object NmeaUtils {
         val lat = convertToNmeaFormat(location.latitude, true)
         val lon = convertToNmeaFormat(location.longitude, false)
         val quality = 1 
-        val satellites = 8 // Fix: Use 8, not 08
+        val satellites = 8 
         val hdop = 1.0 
+        // UCL FIX: Ensure altitude is exactly 1 decimal place (e.g., 366.7)
         val alt = String.format(Locale.US, "%.1f", location.altitude)
         
-        // Fix: Use %02d to force the number 8 to look like "08" in the final text
+        // UCL FIX: Use %02d to force satellite count to be "08"
         val sentence = String.format(Locale.US, "GPGGA,%s,%s,%s,%d,%02d,%.1f,%s,M,0.0,M,,", 
             time, lat, lon, quality, satellites, hdop, alt)
         return "$${sentence}*${calculateChecksum(sentence)}"
@@ -26,6 +27,7 @@ object NmeaUtils {
         val status = "A" 
         val lat = convertToNmeaFormat(location.latitude, true)
         val lon = convertToNmeaFormat(location.longitude, false)
+        // UCL FIX: Round speed and bearing to 1 decimal place
         val speed = String.format(Locale.US, "%.1f", location.speed * 1.94384)
         val bearing = String.format(Locale.US, "%.1f", location.bearing)
         val date = SimpleDateFormat("ddMMyy", Locale.US).format(Date(location.time))
