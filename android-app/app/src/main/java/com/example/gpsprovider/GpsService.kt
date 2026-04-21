@@ -128,6 +128,7 @@ class GpsService : Service() {
 
     fun stopStreaming() { isStreaming.set(false); updateNotification() }
     fun isCurrentlyStreaming(): Boolean = isStreaming.get()
+    fun isClientConnected(): Boolean = bluetoothSocket?.isConnected == true
     fun getLastAccuracy(): Float = lastLocation?.accuracy ?: -1f
 
     private fun createNotificationChannel() {
