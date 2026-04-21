@@ -96,31 +96,35 @@ class GpsService : Service() {
     }
 
     fun startStreaming(): Boolean {
-        val socket = bluetoothSocket
-        if (socket == null || !socket.isConnected) return false
         if (isStreaming.get()) return true // Already running
-
         isStreaming.set(true)
+        updateNotification()
+
         Thread {
-            try {
-                val out = socket.outputStream
-                while (isStreaming.get() && socket.isConnected) {
-                    val loc = lastLocation
-                    // Precise timing (1Hz) for UCL compatibility
-                    if (loc != null && loc.accuracy <= 15) { // Relaxed to 15m as some phones struggle with 10m indoors
-                        val gga = NmeaUtils.generateGga(loc)
-                        val rmc = NmeaUtils.generateRmc(loc)
-                        out.write("$gga\r\n$rmc\r\n".toByteArray())
-                        out.flush()
+            while (isStreaming.get()) {
+                val socket = bluetoothSocket
+                if (socket != null && socket.isConnected) {
+                    try {
+                        val out = socket.outputStream
+                        val loc = lastLocation
+                        // Precise timing (1Hz) for UCL compatibility
+                        if (loc != null && loc.accuracy <= 15) {
+                            val gga = NmeaUtils.generateGga(loc)
+                            val gsa = NmeaUtils.generateGsa()
+                            val gsv = NmeaUtils.generateGsv()
+                            val rmc = NmeaUtils.generateRmc(loc)
+                            out.write("$gga\r\n$gsa\r\n$gsv\r\n$rmc\r\n".toByteArray())
+                            out.flush()
+                        }
+                    } catch (e: Exception) { 
+                        try { socket.close() } catch (ignored: Exception) {}
+                        if (bluetoothSocket == socket) {
+                            bluetoothSocket = null
+                            updateNotification()
+                        }
                     }
-                    // We REMOVED the non-standard $--WAITING... string. 
-                    // Sending invalid NMEA sentences crashes Aadhar UCL's parser, 
-                    // causing it to ignore the COM port even if Putty sees the data.
-                    Thread.sleep(1000) 
                 }
-            } catch (e: IOException) { 
-                try { socket.close() } catch (ignored: Exception) {}
-                stopStreaming() 
+                try { Thread.sleep(1000) } catch (ignored: Exception) {}
             }
         }.start()
         return true

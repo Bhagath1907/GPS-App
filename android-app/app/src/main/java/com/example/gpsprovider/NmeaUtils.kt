@@ -30,6 +30,21 @@ object NmeaUtils {
         return "$${raw}*${calculateChecksum(raw)}"
     }
 
+    // Required by Aadhaar UCL to show satellite lock/strength
+    fun generateGsa(): String {
+        // A = Auto 2D/3D, 3 = 3D Fix, followed by up to 12 PRNs of satellites used, PDOP, HDOP, VDOP
+        val raw = "GPGSA,A,3,01,02,03,04,05,06,07,08,,,,,1.0,1.0,1.0"
+        return "$${raw}*${calculateChecksum(raw)}"
+    }
+
+    // Required by Aadhaar UCL to show satellite signal bars
+    fun generateGsv(): String {
+        // 1 message total, message 1, 4 satellites in view, PRN, Elevation, Azimuth, SNR
+        val raw1 = "GPGSV,2,1,08,01,40,083,46,02,17,308,46,03,76,253,46,04,22,128,46"
+        val raw2 = "GPGSV,2,2,08,05,40,083,46,06,17,308,46,07,76,253,46,08,22,128,46"
+        return "$${raw1}*${calculateChecksum(raw1)}\r\n$${raw2}*${calculateChecksum(raw2)}"
+    }
+
     private fun convertToNmea(coord: Double, isLat: Boolean): String {
         val abs = Math.abs(coord)
         val deg = Math.floor(abs).toInt()
